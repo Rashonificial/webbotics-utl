@@ -1,0 +1,249 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://techmanity.foundation/schemas/webbotics/utl/v2.0/utl_schema.json",
+  "title": "WEBBOTICS Universal Task Language (UTL) Schema v2.0",
+  "description": "Formal schema for hardware-agnostic physical task payloads. Part of the Techmanity Stack — Layer 22 (WEBBOTICS). Invented by Rashon Rahming, Techmanity Foundation. © 2026.",
+  "type": "object",
+  "required": ["task_id", "utl_version", "intent_description", "steps", "success_criteria"],
+  "additionalProperties": false,
+  "properties": {
+    "task_id": {
+      "type": "string",
+      "description": "Globally unique task identifier. Recommended format: UTL-{UUID4}.",
+      "minLength": 3,
+      "maxLength": 128
+    },
+    "utl_version": {
+      "type": "string",
+      "description": "UTL schema version. Must be '2.0'.",
+      "enum": ["2.0"]
+    },
+    "intent_description": {
+      "type": "string",
+      "description": "Human-readable description of the overall task intent.",
+      "minLength": 5,
+      "maxLength": 512
+    },
+    "priority": {
+      "type": "integer",
+      "description": "Task priority level. 1 = lowest, 10 = highest. Default: 5.",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 5
+    },
+    "simulation_required": {
+      "type": "boolean",
+      "description": "If true, the executing robot MUST run a digital twin simulation before physical execution.",
+      "default": false
+    },
+    "confidence_threshold": {
+      "type": "number",
+      "description": "Minimum acceptable confidence score [0.0, 1.0] for task execution. Below this, execution is aborted.",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "default": 0.75
+    },
+    "authorization": {
+      "type": "object",
+      "description": "TIP v9.0 authorization envelope. References the operator's DID and signature.",
+      "additionalProperties": false,
+      "properties": {
+        "operator_did": {
+          "type": "string",
+          "description": "W3C DID of the authorized human operator.",
+          "pattern": "^did:[a-z]+:.+$"
+        },
+        "signature": {
+          "type": "string",
+          "description": "Ed25519 signature over the canonical SHA-256 hash of the task payload."
+        },
+        "issued_at": {
+          "type": "string",
+          "description": "ISO 8601 timestamp of authorization issuance.",
+          "format": "date-time"
+        },
+        "expires_at": {
+          "type": "string",
+          "description": "ISO 8601 timestamp of authorization expiry.",
+          "format": "date-time"
+        }
+      },
+      "required": ["operator_did", "signature"]
+    },
+    "economic_terms": {
+      "type": "object",
+      "description": "WEBBIUM v1.1 economic settlement terms for this task.",
+      "additionalProperties": false,
+      "properties": {
+        "bounty_wbm": {
+          "type": "number",
+          "description": "Task bounty denominated in $WBM tokens.",
+          "minimum": 0.0
+        },
+        "bounty_r": {
+          "type": "number",
+          "description": "Task bounty in Rahmn Economic Units ($R) for stable pricing.",
+          "minimum": 0.0
+        },
+        "escrow_address": {
+          "type": "string",
+          "description": "WEBBIUM smart contract escrow address."
+        },
+        "penalty_wbm": {
+          "type": "number",
+          "description": "$WBM penalty deducted from robot's stake on verified failure.",
+          "minimum": 0.0
+        },
+        "payment_trigger": {
+          "type": "string",
+          "description": "Condition for escrow release.",
+          "enum": ["on_success", "on_completion", "on_buyer_confirm", "on_arbitration"]
+        }
+      },
+      "required": ["bounty_wbm", "payment_trigger"]
+    },
+    "steps": {
+      "type": "array",
+      "description": "Ordered sequence of UTL action steps.",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/definitions/UTLStep"
+      }
+    },
+    "success_criteria": {
+      "$ref": "#/definitions/SuccessCriteria"
+    }
+  },
+  "definitions": {
+    "UTLStep": {
+      "type": "object",
+      "description": "A single executable step in a UTL task.",
+      "required": ["step_id", "action", "parameters"],
+      "additionalProperties": false,
+      "properties": {
+        "step_id": {
+          "type": "string",
+          "description": "Unique identifier for this step within the task.",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "action": {
+          "type": "string",
+          "description": "The UTL action to execute.",
+          "enum": [
+            "locate_object",
+            "navigate_to",
+            "grasp",
+            "release",
+            "insert",
+            "extract",
+            "rotate",
+            "scan",
+            "clean",
+            "wait",
+            "apply_torque",
+            "measure",
+            "haptic"
+          ]
+        },
+        "parameters": {
+          "type": "object",
+          "description": "Action-specific parameters.",
+          "additionalProperties": true
+        },
+        "condition": {
+          "type": "string",
+          "description": "Python-evaluable condition expression. Step executes only if condition evaluates to True. Sandboxed with no builtins.",
+          "maxLength": 256
+        },
+        "on_failure": {
+          "type": "string",
+          "description": "Failure routing policy for this step.",
+          "enum": ["abort", "continue", "retry-once"],
+          "default": "abort"
+        },
+        "timeout_seconds": {
+          "type": "number",
+          "description": "Maximum seconds allowed for this step before it times out.",
+          "minimum": 0.1,
+          "maximum": 3600.0
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of this step's intent.",
+          "maxLength": 256
+        }
+      }
+    },
+    "SuccessCriteria": {
+      "type": "object",
+      "description": "Defines how task success is evaluated against world model state.",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "description": "Success evaluation type.",
+          "enum": [
+            "sensor_reading",
+            "all_steps_completed",
+            "pose_verification",
+            "boolean"
+          ]
+        },
+        "sensor": {
+          "type": "string",
+          "description": "For sensor_reading: the sensor name to query.",
+          "maxLength": 128
+        },
+        "object_id": {
+          "type": "string",
+          "description": "For sensor_reading and pose_verification: the object to evaluate.",
+          "maxLength": 128
+        },
+        "expression": {
+          "type": "string",
+          "description": "For sensor_reading: Python comparison expression evaluated against the sensor value (e.g., '> -3dBm').",
+          "maxLength": 64
+        },
+        "target_pose": {
+          "type": "object",
+          "description": "For pose_verification: expected final pose [x, y, z] in meters.",
+          "additionalProperties": false,
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" },
+            "z": { "type": "number" }
+          },
+          "required": ["x", "y", "z"]
+        },
+        "tolerance_m": {
+          "type": "number",
+          "description": "For pose_verification: acceptable distance tolerance in meters.",
+          "minimum": 0.0
+        },
+        "value": {
+          "type": "boolean",
+          "description": "For boolean type: the required boolean state.",
+          "default": true
+        },
+        "description": {
+          "type": "string",
+          "description": "Human-readable description of what success means.",
+          "maxLength": 256
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "sensor_reading" } } },
+          "then": { "required": ["sensor", "object_id", "expression"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "pose_verification" } } },
+          "then": { "required": ["object_id", "target_pose", "tolerance_m"] }
+        }
+      ]
+    }
+  }
+}
